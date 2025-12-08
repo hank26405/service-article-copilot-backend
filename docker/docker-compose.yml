@@ -1,0 +1,75 @@
+services:
+  service-article-copilot:
+    build:
+      context: ../
+      dockerfile: docker/Dockerfile
+      args:
+        USE_ZSCALER: "true"
+    ports:
+      - "8601:8888"
+    environment:
+      # 只覆寫 Docker 內部網路相關的設定
+      - REDIS_HOST=article-copilot-redis
+      - MONGODB_URI=mongodb://article-copilot-mongodb:27017/
+    env_file:
+      - ./agent.env
+    volumes:
+      - ../data/logs:/home/app/workdir/data/logs
+    depends_on:
+      redis:
+        condition: service_started
+      mongodb:
+        condition: service_healthy
+    networks:
+      - article-copilot-network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: article-copilot-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - article-copilot-network
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    restart: unless-stopped
+
+  mongodb:
+    image: mongo:7.0
+    container_name: article-copilot-mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_DATABASE=article_copilot
+    volumes:
+      - mongodb_data:/data/db
+      - mongodb_config:/data/configdb
+    networks:
+      - article-copilot-network
+    command: mongod --bind_ip_all
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+volumes:
+  redis_data:
+    driver: local
+  mongodb_data:
+    driver: local
+  mongodb_config:
+    driver: local
+
+networks:
+  article-copilot-network:
+    driver: bridge
