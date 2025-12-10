@@ -1,6 +1,6 @@
 [project]
 name = "service-article-copilot"
-version = "0.0.1"
+version = "0.2.0"
 description = "Article Copilot - AI-powered article management service with Redis cache and MongoDB storage."
 authors = [
     { name = "Hank Liang", email = "HankLiang@example.com" }
@@ -48,8 +48,8 @@ dependencies = [
     
     # Authentication & Security
     "python-jose[cryptography]>=3.3.0",  # JWT token 生成與驗證
-    "passlib[bcrypt]>=1.7.4",            # 密碼雜湊
-    "bcrypt>=4.0.1,<5.0.0",                      # bcrypt 演算法 (passlib 的依賴)
+    "passlib==1.7.4",            # 密碼雜湊
+    "bcrypt==4.0.1",                      # bcrypt 演算法 (passlib 的依賴)
     
     # PDF & Image Processing
     "reportlab>=4.0.0",

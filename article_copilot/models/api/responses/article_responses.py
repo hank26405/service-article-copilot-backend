@@ -68,3 +68,19 @@ class ArticleStructureResponse(BaseModel):
                 ]
             }
         }
+
+
+class UpdatePromptResponse(BaseModel):
+    """更新提示詞回應"""
+    message: str = Field(..., description="操作結果訊息")
+    old_prompt: str = Field(None, description="舊的提示詞")
+    new_prompt: str = Field(..., description="新的提示詞")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "message": "Success! Article prompt updated",
+                "old_prompt": "請撰寫文章",
+                "new_prompt": "請用專業且易懂的方式撰寫這篇文章"
+            }
+        }

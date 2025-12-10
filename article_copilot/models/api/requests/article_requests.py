@@ -26,3 +26,15 @@ class UpdateArticleTitleRequest(BaseModel):
                 "new_title": "更新後的文章標題"
             }
         }
+
+
+class UpdatePromptRequest(BaseModel):
+    """更新提示詞請求"""
+    new_prompt: str = Field(..., description="新的提示詞", min_length=1)
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "new_prompt": "請用專業且易懂的方式撰寫這篇文章"
+            }
+        }

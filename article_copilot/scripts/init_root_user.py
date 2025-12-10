@@ -14,13 +14,13 @@ from article_copilot.util.function_utils import generate_id
 from article_copilot.configs.logger_setting import log
 
 
-def create_root_user(email: str = "admin@example.com", password: str = "Admin@123456"):
+def create_root_user(email: str, password: str):
     """
     建立 Root 使用者
     
     Args:
-        email: Root 使用者的 email (預設: admin@example.com)
-        password: Root 使用者的密碼 (預設: Admin@123456)
+        email: Root 使用者的 email
+        password: Root 使用者的密碼
     """
     user_dao = get_user_dao()
     
@@ -59,26 +59,3 @@ def create_root_user(email: str = "admin@example.com", password: str = "Admin@12
         print("❌ Root 使用者建立失敗!")
         log.error("Failed to create root user")
         return False
-
-
-if __name__ == "__main__":
-    import argparse
-    
-    parser = argparse.ArgumentParser(description="初始化 Root 使用者")
-    parser.add_argument(
-        "--email",
-        type=str,
-        default="admin@example.com",
-        help="Root 使用者的 email (預設: admin@example.com)"
-    )
-    parser.add_argument(
-        "--password",
-        type=str,
-        default="Admin@123456",
-        help="Root 使用者的密碼 (預設: Admin@123456)"
-    )
-    
-    args = parser.parse_args()
-    
-    print("🚀 開始建立 Root 使用者...")
-    create_root_user(args.email, args.password)

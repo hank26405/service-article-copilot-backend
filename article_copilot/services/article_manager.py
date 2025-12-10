@@ -153,7 +153,7 @@ class ArticleManager:
         }
 
 
-# --- 服務層級函式 (由 API Router 直接呼叫) ---
+# --- 文章 CRUD 服務函式 ---
 
 def create_new_article(user_id: str, title: str) -> str:
     """建立新文章"""
@@ -175,24 +175,65 @@ def create_new_article(user_id: str, title: str) -> str:
 
 
 def export_article_as_json(user_id: str, article_id: str) -> str:
-    """
-    將指定文件的完整內容匯出為 JSON 字串。
-    
-    :raises ArticleNotFoundError: 當文章不存在時
-    :raises DatabaseConnectionError: 當資料庫連線失敗時
-    """
+    """將指定文件的完整內容匯出為 JSON 字串"""
     manager = ArticleManager(user_id, article_id)
     return manager.get_article_as_json()
 
 
-def list_sections(user_id: str, article_id: str) -> Dict[str, Any]:
-    """
-    列出文件的完整層級結構 (JSON 格式)。
+def list_my_articles(user_id: str) -> List[ArticlesTitleResponse]:
+    """列出使用者的所有文件"""
+    mongodb_dao = get_article_dao()
+    if not mongodb_dao:
+        raise DatabaseConnectionError("MongoDB connection is not available.")
+
+    article_ids = mongodb_dao.get_user_article_ids(user_id)
+
+    if not article_ids:
+        return []
+
+    output = []
+    for article_id in article_ids:
+        try:
+            manager = ArticleManager(user_id, article_id)
+            response = ArticlesTitleResponse(
+                articles_id=article_id,
+                title=manager.article.title
+            )
+            output.append(response)
+        except Exception as e:
+            print(f"Warning: Article ID '{article_id}' could not be loaded: {e}")
+            continue
+
+    return output
+
+
+def delete_article(user_id: str, article_id: str) -> str:
+    """刪除整個文件(包含 MongoDB、Redis 和版本記錄)"""
+    mongodb_dao = get_article_dao()
+    redis_dao = get_redis_article_dao()
+    version_dao = get_version_dao()
     
-    :return: 包含文章結構的字典
-    :raises ArticleNotFoundError: 當文章不存在時
-    :raises DatabaseConnectionError: 當資料庫連線失敗時
-    """
+    if not mongodb_dao:
+        raise DatabaseConnectionError("MongoDB connection is not available.")
+    
+    # 從 MongoDB 刪除文章
+    success = mongodb_dao.delete_article(user_id, article_id)
+    if not success:
+        raise ArticleNotFoundError(f"Article '{article_id}' not found for user '{user_id}'.")
+    
+    # 從 Redis 快取刪除
+    redis_dao.delete_article(user_id, article_id)
+    
+    # 刪除所有版本記錄
+    deleted_versions = version_dao.delete_all_versions(user_id, article_id)
+    
+    return f"Success! Article '{article_id}' deleted (including {deleted_versions} version records)."
+
+
+# --- 章節管理服務函式 ---
+
+def list_sections(user_id: str, article_id: str) -> Dict[str, Any]:
+    """列出文件的完整層級結構"""
     manager = ArticleManager(user_id, article_id)
     
     def _section_to_dict(section: Section) -> Dict[str, Any]:
@@ -220,14 +261,9 @@ def list_sections(user_id: str, article_id: str) -> Dict[str, Any]:
         "sections": [_section_to_dict(sec) for sec in manager.article.sections]
     }
 
+
 def add_main_section(user_id: str, article_id: str, title: str) -> tuple[str, str]:
-    """
-    新增一個頂層主章節到文件中。
-    
-    :return: 新章節的 ID
-    :raises ArticleNotFoundError: 當文章不存在時
-    :raises DatabaseConnectionError: 當資料庫連線失敗時
-    """
+    """新增一個頂層主章節到文件中"""
     manager = ArticleManager(user_id, article_id)
     new_section = Section(title=title, level=1)
     manager.article.sections.append(new_section)
@@ -236,14 +272,7 @@ def add_main_section(user_id: str, article_id: str, title: str) -> tuple[str, st
 
 
 def add_subsection(user_id: str, article_id: str, parent_section_id: str, title: str) -> tuple[str, str]:
-    """
-    在現有章節中新增子章節。
-    
-    :return: 新子章節的 ID
-    :raises ArticleNotFoundError: 當文章不存在時
-    :raises SectionNotFoundError: 當父章節不存在時
-    :raises DatabaseConnectionError: 當資料庫連線失敗時
-    """
+    """在現有章節中新增子章節"""
     manager = ArticleManager(user_id, article_id)
     parent = manager.article.find_section(parent_section_id)
     if not parent:
@@ -253,70 +282,12 @@ def add_subsection(user_id: str, article_id: str, parent_section_id: str, title:
     new_section = Section(title=title, level=new_level)
     parent.subsections.append(new_section)
     
-    manager.save()
+    manager.save(operation="add_subsection", operation_desc=f"Added subsection: {title}")
     return new_section.section_id, f"Success! New subsection '{title}' (Level: {new_level}) created under '{parent.title}' with ID '{new_section.section_id}'."
 
 
-def add_paragraph(user_id: str, article_id: str, section_id: str, text_content: str) -> tuple[str, str]:
-    """
-    在指定章節中新增段落文字。
-    
-    :raises ArticleNotFoundError: 當文章不存在時
-    :raises SectionNotFoundError: 當章節不存在時
-    :raises DatabaseConnectionError: 當資料庫連線失敗時
-    """
-    manager = ArticleManager(user_id, article_id)
-    section = manager.article.find_section(section_id)
-    if not section:
-        raise SectionNotFoundError(f"Section with ID '{section_id}' not found.")
-    
-    new_block = ContentBlock(type="paragraph", content=text_content)
-    section.content_blocks.append(new_block)
-    manager.save()
-    return new_block.block_id, f"Success! Paragraph added to section '{section.title}'."
-
-
-def list_my_articles(user_id: str) -> List[ArticlesTitleResponse]:
-    """
-    列出使用者的所有文件。
-    
-    :return: 文章列表
-    :raises DatabaseConnectionError: 當 MongoDB 無法連接時
-    """
-    mongodb_dao = get_article_dao()
-    if not mongodb_dao:
-        raise DatabaseConnectionError("MongoDB connection is not available.")
-
-    article_ids = mongodb_dao.get_user_article_ids(user_id)
-
-    if not article_ids:
-        return []
-
-    output = []
-    for article_id in article_ids:
-        try:
-            manager = ArticleManager(user_id, article_id)
-            response = ArticlesTitleResponse(
-                articles_id=article_id,
-                title=manager.article.title
-            )
-            output.append(response)
-        except Exception as e:
-            # 記錄錯誤但繼續處理其他文章
-            print(f"Warning: Article ID '{article_id}' could not be loaded: {e}")
-            continue
-
-    return output
-
-
 def update_section_title(user_id: str, article_id: str, section_id: str, new_title: str) -> str:
-    """
-    更新指定章節的標題。
-    
-    :raises ArticleNotFoundError: 當文章不存在時
-    :raises SectionNotFoundError: 當章節不存在時
-    :raises DatabaseConnectionError: 當資料庫連線失敗時
-    """
+    """更新指定章節的標題"""
     manager = ArticleManager(user_id, article_id)
     section = manager.article.find_section(section_id)
     if not section:
@@ -324,45 +295,12 @@ def update_section_title(user_id: str, article_id: str, section_id: str, new_tit
     
     old_title = section.title
     section.title = new_title
-    manager.save()
+    manager.save(operation="update_section_title", operation_desc=f"Updated section title: {old_title} -> {new_title}")
     return f"Success! Section title updated from '{old_title}' to '{new_title}'."
 
 
-def update_paragraph(user_id: str, article_id: str, section_id: str, block_id: str, new_text: str) -> str:
-    """
-    更新指定章節中某個段落的內容。
-    
-    :raises ArticleNotFoundError: 當文章不存在時
-    :raises SectionNotFoundError: 當章節不存在時
-    :raises ContentBlockNotFoundError: 當內容區塊不存在時
-    :raises InvalidContentTypeError: 當操作無效時(例如:區塊不是段落類型)
-    :raises DatabaseConnectionError: 當資料庫連線失敗時
-    """
-    manager = ArticleManager(user_id, article_id)
-    section = manager.article.find_section(section_id)
-    if not section:
-        raise SectionNotFoundError(f"Section with ID '{section_id}' not found.")
-    
-    block = next((b for b in section.content_blocks if b.block_id == block_id), None)
-    if not block:
-        raise ContentBlockNotFoundError(f"Content block with ID '{block_id}' not found in section '{section.title}'.")
-    
-    if block.type != "paragraph":
-        raise InvalidContentTypeError(f"Block '{block_id}' is not a paragraph (type: {block.type}).")
-    
-    block.content = new_text
-    manager.save()
-    return f"Success! Paragraph in section '{section.title}' updated."
-
-
 def delete_section(user_id: str, article_id: str, section_id: str) -> str:
-    """
-    刪除指定的章節及其所有子章節和內容。
-    
-    :raises ArticleNotFoundError: 當文章不存在時
-    :raises SectionNotFoundError: 當章節不存在時
-    :raises DatabaseConnectionError: 當資料庫連線失敗時
-    """
+    """刪除指定的章節及其所有子章節和內容"""
     manager = ArticleManager(user_id, article_id)
     
     # 檢查是否為頂層章節
@@ -370,7 +308,7 @@ def delete_section(user_id: str, article_id: str, section_id: str) -> str:
         if sec.section_id == section_id:
             deleted_title = sec.title
             manager.article.sections.pop(i)
-            manager.save()
+            manager.save(operation="delete_section", operation_desc=f"Deleted section: {deleted_title}")
             return f"Success! Section '{deleted_title}' and all its content deleted."
     
     # 遞迴搜尋子章節
@@ -385,21 +323,48 @@ def delete_section(user_id: str, article_id: str, section_id: str) -> str:
         return False
     
     if _find_and_delete(manager.article.sections):
-        manager.save()
+        manager.save(operation="delete_subsection", operation_desc=f"Deleted subsection: {section_id}")
         return f"Success! Subsection deleted."
     
     raise SectionNotFoundError(f"Section with ID '{section_id}' not found.")
 
 
-def delete_content_block(user_id: str, article_id: str, section_id: str, block_id: str) -> str:
-    """
-    刪除指定章節中的某個內容區塊。
+# --- 內容區塊管理服務函式 ---
+
+def add_paragraph(user_id: str, article_id: str, section_id: str, text_content: str) -> tuple[str, str]:
+    """在指定章節中新增段落文字"""
+    manager = ArticleManager(user_id, article_id)
+    section = manager.article.find_section(section_id)
+    if not section:
+        raise SectionNotFoundError(f"Section with ID '{section_id}' not found.")
     
-    :raises ArticleNotFoundError: 當文章不存在時
-    :raises SectionNotFoundError: 當章節不存在時
-    :raises ContentBlockNotFoundError: 當內容區塊不存在時
-    :raises DatabaseConnectionError: 當資料庫連線失敗時
-    """
+    new_block = ContentBlock(type="paragraph", content=text_content)
+    section.content_blocks.append(new_block)
+    manager.save(operation="add_paragraph", operation_desc=f"Added paragraph to section: {section.title}")
+    return new_block.block_id, f"Success! Paragraph added to section '{section.title}'."
+
+
+def update_paragraph(user_id: str, article_id: str, section_id: str, block_id: str, new_text: str) -> str:
+    """更新指定章節中某個段落的內容"""
+    manager = ArticleManager(user_id, article_id)
+    section = manager.article.find_section(section_id)
+    if not section:
+        raise SectionNotFoundError(f"Section with ID '{section_id}' not found.")
+    
+    block = next((b for b in section.content_blocks if b.block_id == block_id), None)
+    if not block:
+        raise ContentBlockNotFoundError(f"Content block with ID '{block_id}' not found in section '{section.title}'.")
+    
+    if block.type != "paragraph":
+        raise InvalidContentTypeError(f"Block '{block_id}' is not a paragraph (type: {block.type}).")
+    
+    block.content = new_text
+    manager.save(operation="update_paragraph", operation_desc=f"Updated paragraph in section: {section.title}")
+    return f"Success! Paragraph in section '{section.title}' updated."
+
+
+def delete_content_block(user_id: str, article_id: str, section_id: str, block_id: str) -> str:
+    """刪除指定章節中的某個內容區塊"""
     manager = ArticleManager(user_id, article_id)
     section = manager.article.find_section(section_id)
     if not section:
@@ -409,51 +374,22 @@ def delete_content_block(user_id: str, article_id: str, section_id: str, block_i
         if block.block_id == block_id:
             block_type = block.type
             section.content_blocks.pop(i)
-            manager.save()
+            manager.save(operation="delete_content_block", operation_desc=f"Deleted {block_type} from section: {section.title}")
             return f"Success! {block_type.capitalize()} block deleted from section '{section.title}'."
     
     raise ContentBlockNotFoundError(f"Content block with ID '{block_id}' not found in section '{section.title}'.")
 
 
-def delete_article(user_id: str, article_id: str) -> str:
-    """
-    刪除整個文件。
-    使用 Cache-Aside Pattern: 同時從 MongoDB、Redis 和版本記錄中刪除
-    
-    :raises DatabaseConnectionError: 當 MongoDB 無法連接時
-    :raises ArticleNotFoundError: 當文章不存在時
-    """
-    mongodb_dao = get_article_dao()
-    redis_dao = get_redis_article_dao()
-    version_dao = get_version_dao()
-    
-    if not mongodb_dao:
-        raise DatabaseConnectionError("MongoDB connection is not available.")
-    
-    # 從 MongoDB 刪除文章
-    success = mongodb_dao.delete_article(user_id, article_id)
-    if not success:
-        raise ArticleNotFoundError(f"Article '{article_id}' not found for user '{user_id}'.")
-    
-    # 從 Redis 快取刪除
-    redis_dao.delete_article(user_id, article_id)
-    
-    # 刪除所有版本記錄
-    deleted_versions = version_dao.delete_all_versions(user_id, article_id)
-    
-    return f"Success! Article '{article_id}' deleted (including {deleted_versions} version records)."
-
-
 # --- LangChain 工具工廠 (給 Agent 使用) ---
 
 def get_article_editing_tools(user_id: str, article_id: str) -> list:
-    """工廠函式:建立並回傳文件編輯工具列表。"""
+    """工廠函式:建立並回傳文件編輯工具列表 (僅包含文章和章節管理)"""
 
     @tool
     def list_sections_tool() -> str:
         """Lists the complete hierarchical structure of the current article."""
         try:
-            return list_sections(user_id, article_id)
+            return str(list_sections(user_id, article_id))
         except Exception as e:
             return f"Error: {str(e)}"
 
@@ -461,7 +397,8 @@ def get_article_editing_tools(user_id: str, article_id: str) -> list:
     def add_main_section_tool(title: str) -> str:
         """Adds a new TOP-LEVEL main section to the article."""
         try:
-            return add_main_section(user_id, article_id, title)
+            section_id, message = add_main_section(user_id, article_id, title)
+            return message
         except Exception as e:
             return f"Error: {str(e)}"
 
@@ -469,7 +406,8 @@ def get_article_editing_tools(user_id: str, article_id: str) -> list:
     def add_subsection_tool(parent_section_id: str, title: str) -> str:
         """Adds a subsection within an existing section."""
         try:
-            return add_subsection(user_id, article_id, parent_section_id, title)
+            section_id, message = add_subsection(user_id, article_id, parent_section_id, title)
+            return message
         except Exception as e:
             return f"Error: {str(e)}"
 
@@ -477,7 +415,8 @@ def get_article_editing_tools(user_id: str, article_id: str) -> list:
     def add_paragraph_tool(section_id: str, text_content: str) -> str:
         """Adds a block of text (a paragraph) to a specific section."""
         try:
-            return add_paragraph(user_id, article_id, section_id, text_content)
+            block_id, message = add_paragraph(user_id, article_id, section_id, text_content)
+            return message
         except Exception as e:
             return f"Error: {str(e)}"
 
