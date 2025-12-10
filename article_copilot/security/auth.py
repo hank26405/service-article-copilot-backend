@@ -9,7 +9,7 @@ from article_copilot.models.domain.auth import TokenData
 from article_copilot.models.domain.user import User
 from article_copilot.services.user import UserService
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="v1/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/v1/auth/login")
 user_service = UserService()
 
 

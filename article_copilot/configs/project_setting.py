@@ -11,6 +11,8 @@ class ServiceConfig(BaseSettings):
     log_file_name: str = 'service_article_copilot.log'
     system_name: str = "service_article_copilot"
     secret_token: str = Field(default="EMPTY", validation_alias="SECRET_TOKEN")
+    root_user_email: str = Field(default="", validation_alias="ROOT_USER_EMAIL")
+    root_user_password: str = Field(default="", validation_alias="ROOT_USER_PASSWORD")
     model_config = SettingsConfigDict(
         env_file_encoding="utf-8",
         extra="allow"
@@ -18,25 +20,15 @@ class ServiceConfig(BaseSettings):
 
 class SecurityConfig(BaseSettings):
     """Security configuration"""
-    SECRET_KEY: str = Field(..., validation_alias="SECRET_KEY")  # ✅ 必須在 .env 中設定
+    SECRET_KEY: str = Field(default="fet3817", validation_alias="SECRET_KEY")
     ALGORITHM: str = Field(default="HS256", validation_alias="ALGORITHM")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=30, validation_alias="ACCESS_TOKEN_EXPIRE_MINUTES")
-    
     model_config = SettingsConfigDict(
         env_file="agent.env",
         env_file_encoding="utf-8",
         extra="ignore"
     )
 
-class GitHubAIConfig(BaseSettings):
-    """Configuration for the GitHub AI service."""
-    endpoint: str = Field(default="https://models.github.ai/inference", validation_alias="GITHUB_AI_ENDPOINT")
-    token: str = Field(default="EMPTY", validation_alias="GITHUB_API_TOKEN")
-
-    model_config = SettingsConfigDict(
-        env_file_encoding="utf-8",
-        extra="allow"
-    )
 
 class RAGConfig(BaseSettings):
     """Configuration for the RAG service."""
@@ -95,7 +87,7 @@ class EmbeddingLlmConfig(BaseSettings):
 
 class RedisConfigSettings(BaseSettings):
     """Redis configuration settings for caching and session storage."""
-    host: str = Field(default="localhost", validation_alias="REDIS_HOST")
+    host: str = Field(default="article-copilot-redis", validation_alias="REDIS_HOST")
     port: int = Field(default=6379, validation_alias="REDIS_PORT")
     password: Optional[str] = Field(default=None, validation_alias="REDIS_PASSWORD")
     db: int = Field(default=0, validation_alias="REDIS_DB")
@@ -111,7 +103,7 @@ class RedisConfigSettings(BaseSettings):
 class MongoDBConfigSettings(BaseSettings):
     """MongoDB configuration settings for persistent storage."""
     uri: str = Field(
-        default="mongodb://my-mongo:27017/",
+        default="mongodb://article-copilot-mongodb:27017/",
         validation_alias="MONGODB_URI"
     )
     database: str = Field(
@@ -190,7 +182,6 @@ class PromptPathConfig(BaseSettings):
 # 初始化設定
 service_config = ServiceConfig()
 rag_config = RAGConfig()
-github_ai_config = GitHubAIConfig()
 prompt_path_config = PromptPathConfig()
 large_llm_config = LargeLLMConfig()
 small_llm_config = SmallLLMConfig()

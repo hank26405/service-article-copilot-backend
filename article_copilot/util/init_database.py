@@ -31,13 +31,11 @@ def ensure_root_user_exists():
     # 沒有管理員,建立預設 Root 使用者
     log.warning("No admin user found, creating default root user...")
     
-    default_email = "admin@example.com"
-    default_password = "Admin@123456"
     
     root_user = User(
         id=str(generate_id()),
-        email_address=default_email,
-        hashed_password=get_password_hash(default_password),
+        email_address=service_config.root_user_email,
+        hashed_password=get_password_hash(service_config.root_user_password),
         authority=Authorities.SYS_ADMIN,
         name="System Administrator"
     )
@@ -48,8 +46,8 @@ def ensure_root_user_exists():
         log.warning("=" * 60)
         log.warning("⚠️  DEFAULT ROOT USER CREATED ⚠️")
         log.warning("=" * 60)
-        log.warning(f"Email: {default_email}")
-        log.warning(f"Password: {default_password}")
+        log.warning(f"Email: {service_config.root_user_email}")
+        log.warning(f"Password: {service_config.root_user_password}")
         log.warning("=" * 60)
         log.warning("🔒 PLEASE CHANGE THE DEFAULT PASSWORD IMMEDIATELY!")
         log.warning("=" * 60)

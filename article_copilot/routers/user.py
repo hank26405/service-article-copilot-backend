@@ -33,7 +33,7 @@ def create_user_router() -> APIRouter:
     # ==================== 使用者 CRUD ====================
 
     @router.post(
-        "/users",
+        "/",
         response_model=UserResponse,
         responses={
             400: {"model": ErrorResponse, "description": "驗證錯誤"},
@@ -93,7 +93,7 @@ def create_user_router() -> APIRouter:
             )
 
     @router.get(
-        "/users",
+        "/",
         response_model=List[UserResponse],
         responses={
             500: {"model": ErrorResponse, "description": "伺服器錯誤"}
@@ -132,7 +132,7 @@ def create_user_router() -> APIRouter:
             )
 
     @router.get(
-        "/users/me",
+        "/me",
         response_model=UserResponse,
         summary="取得當前使用者資訊",
         description="取得目前登入使用者的資訊"
@@ -159,7 +159,7 @@ def create_user_router() -> APIRouter:
             )
 
     @router.get(
-        "/users/{user_id}",
+        "/{user_id}",
         response_model=UserResponse,
         responses={
             404: {"model": ErrorResponse, "description": "使用者不存在"}
@@ -199,7 +199,7 @@ def create_user_router() -> APIRouter:
             )
 
     @router.put(
-        "/users/{user_id}",
+        "/{user_id}",
         response_model=UserResponse,
         responses={
             404: {"model": ErrorResponse, "description": "使用者不存在"},
@@ -242,7 +242,7 @@ def create_user_router() -> APIRouter:
             )
 
     @router.delete(
-        "/users/{user_id}",
+        "/{user_id}",
         response_model=StandardResponse,
         responses={
             404: {"model": ErrorResponse, "description": "使用者不存在"}
@@ -299,7 +299,7 @@ def create_user_router() -> APIRouter:
     # ==================== 密碼管理 ====================
 
     @router.post(
-        "/users/me/change-password",
+        "/me/change-password",
         response_model=StandardResponse,
         responses={
             400: {"model": ErrorResponse, "description": "驗證錯誤"},

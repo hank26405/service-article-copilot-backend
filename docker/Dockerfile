@@ -75,17 +75,20 @@ RUN groupadd -r ${APP_GROUP} && \
 # Set working directory
 WORKDIR ${PROJECT_PATH}
 
+RUN mkdir -p article_copilot
+
 # --- Copy dependency files ---
 COPY --chown=${APP_USER}:${APP_GROUP} pyproject.toml uv.lock ./
 
+# --- Dependency Installation (run as root) ---
+RUN python3 -m pip install --no-cache-dir ".[dev]"
 
 # --- Copy Application Code ---
 COPY --chown=${APP_USER}:${APP_GROUP} article_copilot/ ./article_copilot/
 COPY --chown=${APP_USER}:${APP_GROUP} docker/start.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/start.sh
 
-# --- Dependency Installation (run as root) ---
-RUN python3 -m pip install --no-cache-dir ".[dev]"
+
 
 # --- Switch to non-privileged user ---
 USER ${APP_USER}
