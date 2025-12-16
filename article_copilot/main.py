@@ -1,6 +1,7 @@
 """This file creates the fastapi service with dependency injection and lifecycle management."""
 # coding=utf-8
 import os
+from article_copilot.routers.material import create_material_router
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
@@ -65,11 +66,15 @@ def create_app() -> FastAPI:
         prefix=f"{api_version}/prompts",
         tags=["Prompts"]
     )
-    # 註冊 Auth Router (放在最前面)
     app.include_router(
         create_auth_router(),
         prefix=f"{api_version}/auth",
         tags=["Authentication"]
+    )
+    app.include_router(
+        create_material_router(),
+        prefix=f"{api_version}/materials",
+        tags=["Materials"]
     )
 
     @app.exception_handler(RequestValidationError)

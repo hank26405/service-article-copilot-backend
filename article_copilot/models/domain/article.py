@@ -14,6 +14,7 @@ class Article(BaseModel):
     sections: List[Section] = Field(default_factory=list, description="文章的章節列表")
     metadata: dict = Field(default_factory=dict, description="文章元數據")
     article_prompt: Optional[str] = Field(default="", description="生成內容所使用的提示詞")
+    reference_material_names: List[str] = Field(default=[], description="整篇文章的通用參考素材名稱列表 (全域 Context)")
     fixed: bool = Field(default=False, description="是否為修訂文章")
     
     def find_section(self, section_id: str) -> Optional[Section]:
@@ -42,6 +43,6 @@ class Article(BaseModel):
                 "sections": [],
                 "metadata": {},
                 "article_prompt": "",
-                "fixed": False
+                "reference_material_names": [],
             }
         }
