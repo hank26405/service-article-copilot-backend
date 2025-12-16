@@ -16,6 +16,7 @@ class Section(BaseModel):
     content_blocks: List[ContentBlock] = Field(default_factory=list, description="內容區塊")
     subsections: List['Section'] = Field(default_factory=list, description="子章節")
     section_prompt: Optional[str] = Field(default="", description="生成內容所使用的提示詞")
+    reference_material_names: List[str] = Field(default=[], description="生成此章節所參考的素材名稱列表")
     fixed: bool = Field(default=False, description="是否為修訂章節")
     
     def find_subsection(self, section_id: str) -> Optional['Section']:

@@ -1,6 +1,6 @@
 [project]
 name = "service-article-copilot"
-version = "0.2.0"
+version = "0.3.0"
 description = "Article Copilot - AI-powered article management service with Redis cache and MongoDB storage."
 authors = [
     { name = "Hank Liang", email = "HankLiang@example.com" }
@@ -22,7 +22,7 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "pydantic>=2.9.0",
     "pydantic-settings>=2.5.0",
-    "email-validator>=2.0.0",            # EmailStr 驗證支援
+    "email-validator>=2.0.0",
     
     # Time & Locale
     "pytz>=2024.0",
@@ -41,6 +41,9 @@ dependencies = [
     
     # Document Processing
     "unstructured[pdf]>=0.16.0",
+    "python-docx>=1.1.0",                 # Word 文件處理
+    "openpyxl>=3.1.0",                    # Excel 文件處理
+    "python-pptx>=0.6.0",                 # PowerPoint 文件處理
     
     # Database & Cache
     "redis>=5.0.0",

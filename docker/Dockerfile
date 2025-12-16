@@ -81,7 +81,7 @@ RUN mkdir -p article_copilot
 COPY --chown=${APP_USER}:${APP_GROUP} pyproject.toml uv.lock ./
 
 # --- Dependency Installation (run as root) ---
-RUN python3 -m pip install --no-cache-dir ".[dev]"
+RUN python3 -m pip install --default-timeout=300 --retries=5 --no-cache-dir ".[dev]"
 
 # --- Copy Application Code ---
 COPY --chown=${APP_USER}:${APP_GROUP} article_copilot/ ./article_copilot/
@@ -96,8 +96,5 @@ USER ${APP_USER}
 # Expose application port
 EXPOSE 8888
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:8888/health || exit 1
 
 ENTRYPOINT ["start.sh"]
