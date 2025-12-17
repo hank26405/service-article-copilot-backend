@@ -1,6 +1,6 @@
 [project]
 name = "service-article-copilot"
-version = "0.3.0"
+version = "0.3.1"
 description = "Article Copilot - AI-powered article management service with Redis cache and MongoDB storage."
 authors = [
     { name = "Hank Liang", email = "HankLiang@example.com" }
@@ -44,6 +44,7 @@ dependencies = [
     "python-docx>=1.1.0",                 # Word 文件處理
     "openpyxl>=3.1.0",                    # Excel 文件處理
     "python-pptx>=0.6.0",                 # PowerPoint 文件處理
+    "tabulate>=0.9.0",                    # 表格格式化 (pandas HTML 轉換需要)
     
     # Database & Cache
     "redis>=5.0.0",

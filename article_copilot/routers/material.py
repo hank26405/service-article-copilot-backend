@@ -1,5 +1,6 @@
 """This file creates the FastAPI router for material-related endpoints."""
 from article_copilot.exceptions.article_exceptions import ContentBlockNotFoundError, SectionNotFoundError
+from article_copilot.models.domain.user import User
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from fastapi.responses import StreamingResponse
 from typing import List
@@ -18,10 +19,10 @@ def create_material_router() -> APIRouter:
     @router.post("/upload", response_model=Material)
     async def upload_material(
         file: UploadFile = File(...), 
-        user_id: str = Depends(get_current_user)
+        current_user: User = Depends(get_current_user)
     ):
         """上傳檔案並建立素材"""
-        service = MaterialService(user_id)
+        service = MaterialService(current_user.id)
         try:
             material = await service.process_upload(file)
             return material
@@ -33,15 +34,15 @@ def create_material_router() -> APIRouter:
     @router.post("/paste", response_model=Material)
     async def paste_material(
         request: PasteRequest,
-        user_id: str = Depends(get_current_user)
+        current_user: User = Depends(get_current_user)
     ):
         """
         處理剪貼簿貼上 (Excel/HTML) 並建立素材
         前端需傳送包含 html_content 的 JSON
         """
-        service = MaterialService(user_id)
+        service = MaterialService(current_user.id)
         try:
-            material = await service.process_paste_content(request.html_content)
+            material = await service.process_paste_content(request.html_content, request.filename)
             return material
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Paste processing failed: {str(e)}")
@@ -49,41 +50,41 @@ def create_material_router() -> APIRouter:
     @router.get("/list", response_model=List[Material])
     async def list_materials(
         include_shared: bool = False,
-        user_id: str = Depends(get_current_user)
+        current_user: User = Depends(get_current_user)
     ):
         """
         列出素材
         :param include_shared: 是否包含被分享的素材
         """
-        service = MaterialService(user_id)
+        service = MaterialService(current_user.id)
         return service.list_materials(include_shared=include_shared)
 
     @router.get("/list/own", response_model=List[Material])
-    async def list_own_materials(user_id: str = Depends(get_current_user)):
+    async def list_own_materials(current_user: User = Depends(get_current_user)):
         """列出使用者自己擁有的所有素材"""
-        service = MaterialService(user_id)
+        service = MaterialService(current_user.id)
         return service.list_own_materials()
 
     @router.get("/list/shared", response_model=List[Material])
-    async def list_shared_materials(user_id: str = Depends(get_current_user)):
+    async def list_shared_materials(current_user: User = Depends(get_current_user)):
         """列出別人分享給使用者的所有素材"""
-        service = MaterialService(user_id)
+        service = MaterialService(current_user.id)
         return service.list_shared_materials()
 
     @router.get("/list/all", response_model=List[Material])
-    async def list_all_accessible_materials(user_id: str = Depends(get_current_user)):
+    async def list_all_accessible_materials(current_user: User = Depends(get_current_user)):
         """列出所有可存取的素材 (自己的 + 被分享的)"""
-        service = MaterialService(user_id)
+        service = MaterialService(current_user.id)
         return service.list_all_accessible_materials()
 
     @router.post("/{material_id}/share")
     async def share_material(
         material_id: str,
         target_user_ids: List[str],
-        user_id: str = Depends(get_current_user)
+        current_user: User = Depends(get_current_user)
     ):
         """分享素材給其他使用者"""
-        service = MaterialService(user_id)
+        service = MaterialService(current_user.id)
         success = service.share_material(material_id, target_user_ids)
         if not success:
             raise HTTPException(status_code=403, detail="Not authorized or material not found")
@@ -93,10 +94,10 @@ def create_material_router() -> APIRouter:
     async def unshare_material(
         material_id: str,
         target_user_ids: List[str],
-        user_id: str = Depends(get_current_user)
+        current_user: User = Depends(get_current_user)
     ):
         """取消分享素材給指定使用者"""
-        service = MaterialService(user_id)
+        service = MaterialService(current_user.id)
         success = service.unshare_material(material_id, target_user_ids)
         if not success:
             raise HTTPException(status_code=403, detail="Not authorized or material not found")
@@ -105,31 +106,31 @@ def create_material_router() -> APIRouter:
     @router.delete("/{material_id}")
     async def delete_material(
         material_id: str,
-        user_id: str = Depends(get_current_user)
+        current_user: User = Depends(get_current_user)
     ):
         """刪除素材 (僅擁有者可刪除)"""
-        service = MaterialService(user_id)
+        service = MaterialService(current_user.id)
         success = service.delete_material(material_id)
         if not success:
             raise HTTPException(status_code=403, detail="Not authorized or material not found")
         return {"message": "Material deleted successfully"}
 
     @router.get("/{material_id}", response_model=Material)
-    async def get_material_info(material_id: str, user_id: str = Depends(get_current_user)):
+    async def get_material_info(material_id: str, current_user: User = Depends(get_current_user)):
         """取得素材 Metadata"""
-        service = MaterialService(user_id)
+        service = MaterialService(current_user.id)
         material = service.get_material(material_id)
         if not material:
             raise HTTPException(status_code=404, detail="Material not found")
         return material
 
     @router.get("/{material_id}/view")
-    async def view_material_file(material_id: str, user_id: str = Depends(get_current_user)):
+    async def view_material_file(material_id: str, current_user: User = Depends(get_current_user)):
         """
         取得原始檔案內容 (Stream)
         適用於顯示 PDF 或 Image
         """
-        service = MaterialService(user_id)
+        service = MaterialService(current_user.id)
         material = service.get_material(material_id)
         if not material:
             raise HTTPException(status_code=404, detail="Material not found")
@@ -148,10 +149,10 @@ def create_material_router() -> APIRouter:
     async def update_article_references(
         article_id: str,
         material_names: List[str],
-        user_id: str = Depends(get_current_user)
+        current_user: User = Depends(get_current_user)
     ):
         """更新文章層級的參考素材名稱列表"""
-        service = MaterialService(user_id)
+        service = MaterialService(current_user.id)
         try:
             success = service.update_article_references(article_id, material_names)
             if not success:
@@ -169,10 +170,10 @@ def create_material_router() -> APIRouter:
         article_id: str,
         section_id: str,
         material_names: List[str],
-        user_id: str = Depends(get_current_user)
+        current_user: User = Depends(get_current_user)
     ):
         """更新章節層級的參考素材名稱列表"""
-        service = MaterialService(user_id)
+        service = MaterialService(current_user.id)
         try:
             success = service.update_section_references(article_id, section_id, material_names)
             if not success:
@@ -194,10 +195,10 @@ def create_material_router() -> APIRouter:
         section_id: str,
         block_id: str,
         material_names: List[str],
-        user_id: str = Depends(get_current_user)
+        current_user: User = Depends(get_current_user)
     ):
         """更新內容區塊層級的參考素材名稱列表"""
-        service = MaterialService(user_id)
+        service = MaterialService(current_user.id)
         try:
             success = service.update_block_references(article_id, section_id, block_id, material_names)
             if not success:

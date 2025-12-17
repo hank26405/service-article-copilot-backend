@@ -175,14 +175,15 @@ class MaterialService:
             return None
         return self.material_dao.get_file_from_gridfs(material.gridfs_id)
 
-    async def process_paste_content(self, html_content: str) -> Material:
+    async def process_paste_content(self, html_content: str, filename: str = None) -> Material:
         """
         處理 Excel/網頁 貼上 (Pure HTML String)
         """
         # 1. 準備偽造的檔案資訊
         # 因為來源是字串，我們自己定義一個檔名
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"Pasted_Table_{timestamp}.html"
+        if not filename:
+            filename = f"Pasted_Table_{timestamp}.html"
         content_type = "text/html"
         
         # 轉成 bytes，因為我們的 GridFS 和 Processor 都吃 bytes
@@ -226,71 +227,3 @@ class MaterialService:
             raise Exception("Failed to save pasted material")
             
         return material
-
-    def update_article_references(self, article_id: str, material_names: List[str]) -> bool:
-        """
-        更新文章層級的參考素材名稱列表
-        
-        :param article_id: 文章 ID
-        :param material_names: 素材名稱列表
-        :return: 是否更新成功
-        """
-        
-        manager = ArticleManager(self.user_id, article_id)
-        manager.article.reference_material_names = material_names
-        manager.save(
-            operation="update_article_references",
-            operation_desc=f"Updated article references: {', '.join(material_names)}"
-        )
-        return True
-
-    def update_section_references(self, article_id: str, section_id: str, material_names: List[str]) -> bool:
-        """
-        更新章節層級的參考素材名稱列表
-        
-        :param article_id: 文章 ID
-        :param section_id: 章節 ID
-        :param material_names: 素材名稱列表
-        :return: 是否更新成功
-        """
-        
-        manager = ArticleManager(self.user_id, article_id)
-        section = manager.article.find_section(section_id)
-        
-        if not section:
-            raise SectionNotFoundError(f"Section with ID '{section_id}' not found.")
-        
-        section.reference_material_names = material_names
-        manager.save(
-            operation="update_section_references",
-            operation_desc=f"Updated section '{section.title}' references: {', '.join(material_names)}"
-        )
-        return True
-
-    def update_block_references(self, article_id: str, section_id: str, block_id: str, material_names: List[str]) -> bool:
-        """
-        更新內容區塊層級的參考素材名稱列表
-        
-        :param article_id: 文章 ID
-        :param section_id: 章節 ID
-        :param block_id: 內容區塊 ID
-        :param material_names: 素材名稱列表
-        :return: 是否更新成功
-        """
-        
-        manager = ArticleManager(self.user_id, article_id)
-        section = manager.article.find_section(section_id)
-        
-        if not section:
-            raise SectionNotFoundError(f"Section with ID '{section_id}' not found.")
-        
-        block = next((b for b in section.content_blocks if b.block_id == block_id), None)
-        if not block:
-            raise ContentBlockNotFoundError(f"Content block with ID '{block_id}' not found.")
-        
-        block.reference_material_names = material_names
-        manager.save(
-            operation="update_block_references",
-            operation_desc=f"Updated block '{block_id}' references in section '{section.title}': {', '.join(material_names)}"
-        )
-        return True

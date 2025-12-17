@@ -1,6 +1,6 @@
 """Article Manager Service - 文章管理服務層"""
 import uuid
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from article_copilot.daos.mongo_db.version_mongo_dao import get_version_dao
 from article_copilot.models.api.responses.article_responses import ArticlesTitleResponse
@@ -151,6 +151,31 @@ class ArticleManager:
             "can_undo": self.version_manager.can_undo(),
             "can_redo": self.version_manager.can_redo()
         }
+    
+    def update_article(self, updated_article: Article, operation_desc: str = "Updated entire article") -> str:
+        """
+        更新整個文章,包含所有 sections 和 content_blocks
+        
+        :param updated_article: 更新後的完整文章物件
+        :param operation_desc: 操作描述
+        :return: 成功訊息
+        :raises ArticleNotFoundError: 當原文章不存在時
+        :raises DatabaseOperationError: 當儲存失敗時
+        """
+        # 驗證文章 ID 和使用者 ID 是否匹配
+        if updated_article.article_id != self.article_id:
+            raise ValueError(f"Article ID mismatch: expected {self.article_id}, got {updated_article.article_id}")
+        
+        if updated_article.user_id != self.user_id:
+            raise ValueError(f"User ID mismatch: expected {self.user_id}, got {updated_article.user_id}")
+        
+        # 更新內部文章物件
+        self.article = updated_article
+        
+        # 儲存到資料庫和快取
+        self.save(operation="update_article", operation_desc=operation_desc)
+        
+        return f"Success! Article '{self.article.title}' updated with {len(self.article.sections)} sections."
 
 
 # --- 文章 CRUD 服務函式 ---
@@ -232,36 +257,6 @@ def delete_article(user_id: str, article_id: str) -> str:
 
 # --- 章節管理服務函式 ---
 
-def list_sections(user_id: str, article_id: str) -> Dict[str, Any]:
-    """列出文件的完整層級結構"""
-    manager = ArticleManager(user_id, article_id)
-    
-    def _section_to_dict(section: Section) -> Dict[str, Any]:
-        """將 Section 轉換為字典格式"""
-        return {
-            "section_id": section.section_id,
-            "title": section.title,
-            "level": section.level,
-            "content_blocks": [
-                {
-                    "block_id": block.block_id,
-                    "type": block.type,
-                    "content_preview": str(block.content)[:50] + "..." if len(str(block.content)) > 100 else str(block.content)
-                }
-                for block in section.content_blocks
-            ],
-            "subsections": [_section_to_dict(sub) for sub in section.subsections]
-        }
-    
-    return {
-        "article_id": manager.article.article_id,
-        "article_title": manager.article.title,
-        "user_id": manager.article.user_id,
-        "total_sections": len(manager.article.sections),
-        "sections": [_section_to_dict(sec) for sec in manager.article.sections]
-    }
-
-
 def add_main_section(user_id: str, article_id: str, title: str) -> tuple[str, str]:
     """新增一個頂層主章節到文件中"""
     manager = ArticleManager(user_id, article_id)
@@ -284,19 +279,6 @@ def add_subsection(user_id: str, article_id: str, parent_section_id: str, title:
     
     manager.save(operation="add_subsection", operation_desc=f"Added subsection: {title}")
     return new_section.section_id, f"Success! New subsection '{title}' (Level: {new_level}) created under '{parent.title}' with ID '{new_section.section_id}'."
-
-
-def update_section_title(user_id: str, article_id: str, section_id: str, new_title: str) -> str:
-    """更新指定章節的標題"""
-    manager = ArticleManager(user_id, article_id)
-    section = manager.article.find_section(section_id)
-    if not section:
-        raise SectionNotFoundError(f"Section with ID '{section_id}' not found.")
-    
-    old_title = section.title
-    section.title = new_title
-    manager.save(operation="update_section_title", operation_desc=f"Updated section title: {old_title} -> {new_title}")
-    return f"Success! Section title updated from '{old_title}' to '{new_title}'."
 
 
 def delete_section(user_id: str, article_id: str, section_id: str) -> str:
@@ -331,36 +313,17 @@ def delete_section(user_id: str, article_id: str, section_id: str) -> str:
 
 # --- 內容區塊管理服務函式 ---
 
-def add_paragraph(user_id: str, article_id: str, section_id: str, text_content: str) -> tuple[str, str]:
+def add_content_block(user_id: str, article_id: str, section_id: str, text_content: str, type: str) -> tuple[str, str]:
     """在指定章節中新增段落文字"""
     manager = ArticleManager(user_id, article_id)
     section = manager.article.find_section(section_id)
     if not section:
         raise SectionNotFoundError(f"Section with ID '{section_id}' not found.")
     
-    new_block = ContentBlock(type="paragraph", content=text_content)
+    new_block = ContentBlock(type=type, content=text_content)
     section.content_blocks.append(new_block)
     manager.save(operation="add_paragraph", operation_desc=f"Added paragraph to section: {section.title}")
     return new_block.block_id, f"Success! Paragraph added to section '{section.title}'."
-
-
-def update_paragraph(user_id: str, article_id: str, section_id: str, block_id: str, new_text: str) -> str:
-    """更新指定章節中某個段落的內容"""
-    manager = ArticleManager(user_id, article_id)
-    section = manager.article.find_section(section_id)
-    if not section:
-        raise SectionNotFoundError(f"Section with ID '{section_id}' not found.")
-    
-    block = next((b for b in section.content_blocks if b.block_id == block_id), None)
-    if not block:
-        raise ContentBlockNotFoundError(f"Content block with ID '{block_id}' not found in section '{section.title}'.")
-    
-    if block.type != "paragraph":
-        raise InvalidContentTypeError(f"Block '{block_id}' is not a paragraph (type: {block.type}).")
-    
-    block.content = new_text
-    manager.save(operation="update_paragraph", operation_desc=f"Updated paragraph in section: {section.title}")
-    return f"Success! Paragraph in section '{section.title}' updated."
 
 
 def delete_content_block(user_id: str, article_id: str, section_id: str, block_id: str) -> str:
@@ -378,3 +341,73 @@ def delete_content_block(user_id: str, article_id: str, section_id: str, block_i
             return f"Success! {block_type.capitalize()} block deleted from section '{section.title}'."
     
     raise ContentBlockNotFoundError(f"Content block with ID '{block_id}' not found in section '{section.title}'.")
+
+def update_article_title(user_id: str, article_id: str, new_title: str) -> str:
+    """
+    更新文章標題
+    
+    :param user_id: 使用者 ID
+    :param article_id: 文章 ID
+    :param new_title: 新的文章標題
+    :return: 成功訊息
+    """
+    manager = ArticleManager(user_id, article_id)
+    old_title = manager.article.title
+    manager.article.title = new_title
+    manager.save(
+        operation="update_article_title",
+        operation_desc=f"Updated article title: {old_title} -> {new_title}"
+    )
+    return f"Success! Article title updated from '{old_title}' to '{new_title}'."
+
+def update_article_prompt(user_id: str, article_id: str, new_prompt: str) -> str:
+    """
+    更新文章的生成提示詞
+    
+    :param user_id: 使用者 ID
+    :param article_id: 文章 ID
+    :param new_prompt: 新的提示詞
+    :return: 成功訊息
+    """
+    manager = ArticleManager(user_id, article_id)
+    old_prompt = manager.article.article_prompt
+    manager.article.article_prompt = new_prompt
+    manager.save(
+        operation="update_article_prompt",
+        operation_desc=f"Updated article prompt"
+    )
+    return f"Success! Article prompt updated."
+
+def replace_section(
+    user_id: str,
+    article_id: str,
+    section_id: str,
+    updated_section: Section
+) -> str:
+    """替換整個章節,包含所有內容區塊和子章節"""
+    manager = ArticleManager(user_id, article_id)
+    
+    # 驗證 section_id 是否匹配
+    if updated_section.section_id != section_id:
+        raise ValueError(f"Section ID mismatch: expected {section_id}, got {updated_section.section_id}")
+    
+    # 檢查是否為頂層章節
+    for i, sec in enumerate(manager.article.sections):
+        if sec.section_id == section_id:
+            old_title = sec.title
+            manager.article.sections[i] = updated_section
+            manager.save(
+                operation="replace_section",
+                operation_desc=f"Replaced section: {old_title}"
+            )
+            return f"Success! Section '{old_title}' has been replaced."
+        
+        # 使用新的 replace_subsection 方法
+        if sec.replace_subsection(section_id, updated_section):
+            manager.save(
+                operation="replace_subsection",
+                operation_desc=f"Replaced subsection: {section_id}"
+            )
+            return f"Success! Subsection has been replaced."
+    
+    raise SectionNotFoundError(f"Section with ID '{section_id}' not found.")
