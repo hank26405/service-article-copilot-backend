@@ -28,10 +28,12 @@ class TableContent(BaseModel):
 class ContentBlock(BaseModel):
     """內容區塊領域模型"""
     block_id: str = Field(default_factory=lambda: f"blk-{uuid.uuid4().hex[:8]}")
-    type: str = Field(..., description="內容類型: paragraph, image, chart, html, table, file")
+    type: str = Field(..., description="內容類型: paragraph, image, html")
     content: Union[str, ImageContent, ChartContent, TableContent] = Field(..., description="內容資料")
     block_prompt: Optional[str] = Field(default="", description="生成內容所使用的提示詞")
     reference_material_names: List[str] = Field(default=[], description="生成此區塊所參考的素材名稱列表")
+    reference_examples: str = Field(default="", description="參考範例,用於 LLM 生成時的風格參考")
+    llm_raw_output: Optional[str] = Field(default=None, description="LLM 原始生成結果 (未經處理)")
     fixed: bool = Field(default=False, description="是否為修訂內容區塊")
     
     class Config:
@@ -42,6 +44,8 @@ class ContentBlock(BaseModel):
                 "content": "這是一段文字內容",
                 "block_prompt": "",
                 "reference_material_names": ["material1", "material2"],
+                "reference_examples": "example",
+                "llm_raw_output": "LLM 原始輸出內容...",
                 "fixed": False
             }
         }

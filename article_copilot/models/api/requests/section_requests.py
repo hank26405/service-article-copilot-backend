@@ -15,15 +15,3 @@ class AddSectionRequest(BaseModel):
                 "parent_section_id": None
             }
         }
-
-
-class UpdateSectionTitleRequest(BaseModel):
-    """更新章節標題請求"""
-    new_title: str = Field(..., description="新的章節標題", min_length=1, max_length=200)
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "new_title": "第一章 修訂版"
-            }
-        }

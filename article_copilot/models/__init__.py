@@ -8,7 +8,7 @@ from article_copilot.models.domain.article_version import ArticleVersion
 
 # API Request Models
 from .api.requests.article_requests import CreateArticleRequest, UpdateArticleTitleRequest
-from .api.requests.section_requests import AddSectionRequest, UpdateSectionTitleRequest
+from .api.requests.section_requests import AddSectionRequest
 from .api.requests.content_requests import AddContentRequest, UpdateContentRequest
 
 # API Response Models
@@ -38,7 +38,6 @@ __all__ = [
     "CreateArticleRequest",
     "UpdateArticleTitleRequest",
     "AddSectionRequest",
-    "UpdateSectionTitleRequest",
     "AddContentRequest",
     "UpdateContentRequest",
     

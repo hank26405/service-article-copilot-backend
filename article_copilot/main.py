@@ -13,7 +13,6 @@ from article_copilot.routers.user import create_user_router
 from article_copilot.util.init_database import initialize_database
 from article_copilot.routers.health_check import create_health_check_router
 from article_copilot.routers.article import create_article_router
-from article_copilot.routers.prompt import create_prompt_router
 from article_copilot.configs.logger_setting import log
 from article_copilot.util import function_utils
 from article_copilot.routers.auth import create_auth_router
@@ -60,11 +59,6 @@ def create_app() -> FastAPI:
         create_article_router(),
         prefix=f"{api_version}/articles",
         tags=["Articles"]
-    )
-    app.include_router(
-        create_prompt_router(),
-        prefix=f"{api_version}/prompts",
-        tags=["Prompts"]
     )
     app.include_router(
         create_auth_router(),

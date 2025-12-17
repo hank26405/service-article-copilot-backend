@@ -35,6 +35,16 @@ class Section(BaseModel):
         for subsection in self.subsections:
             count += subsection.count_all_subsections()
         return count
+    
+    def replace_subsection(self, section_id: str, new_section: 'Section') -> bool:
+        """遞迴搜尋並替換子章節"""
+        for i, subsection in enumerate(self.subsections):
+            if subsection.section_id == section_id:
+                self.subsections[i] = new_section
+                return True
+            if subsection.replace_subsection(section_id, new_section):
+                return True
+        return False
 
 
 Section.model_rebuild()
