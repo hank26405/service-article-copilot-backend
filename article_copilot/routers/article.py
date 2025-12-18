@@ -333,22 +333,20 @@ def create_article_router() -> APIRouter:
             log.error(f"Update prompt error: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail={"error": "INTERNAL_SERVER_ERROR"})
     
-    @router.post("/{article_id}/copy/{target_user_id}", response_model=CreateArticleResponse)
+    @router.post("/{article_id}/copy", response_model=CreateArticleResponse)
     async def copy_article(
-        article_id: str = Path(..., description="來源文章 ID"),
-        target_user_id: str = Path(..., description="目標使用者 ID"),
+        article_id: str = Path(..., description="要複製的文章 ID"),
         current_user: User = Depends(get_current_user)
     ):
-        """複製文章給特定使用者"""
+        """複製分享的文章到自己的帳號"""
         try:
             new_article_id = copy_article_to_user(
-                source_user_id=current_user.id,
                 source_article_id=article_id,
-                target_user_id=target_user_id
+                target_user_id=current_user.id
             )
             return CreateArticleResponse(
                 article_id=new_article_id,
-                message=f"Article copied successfully to user {target_user_id}"
+                message="Article copied successfully"
             )
         except ArticleNotFoundError as e:
             raise HTTPException(status_code=404, detail=e.to_dict())
