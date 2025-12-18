@@ -6,6 +6,8 @@ from datetime import datetime
 from article_copilot.daos.mongo_db.version_mongo_dao import get_version_dao
 from article_copilot.models.api.responses.article_responses import ArticlesTitleResponse
 from langchain.tools import tool
+import copy
+
 
 # 匯入資料模型
 from article_copilot.models import (Article, ContentBlock, Section)
@@ -20,9 +22,9 @@ from article_copilot.exceptions import (
     SectionNotFoundError,
     ContentBlockNotFoundError,
     DatabaseConnectionError,
-    InvalidContentTypeError,
     DatabaseOperationError
 )
+from article_copilot.daos.mongo_db.material_dao import get_material_dao
 
 # --- Cache-Aside Pattern 配置 ---
 REDIS_CACHE_TTL = 3600  # Redis 快取過期時間 (秒)
@@ -431,19 +433,16 @@ def replace_section(
     
     raise SectionNotFoundError(f"Section with ID '{section_id}' not found.")
 
-def copy_article_to_user(source_user_id: str, source_article_id: str, target_user_id: str) -> str:
+def copy_article_to_user(source_article_id: str, target_user_id: str) -> str:
     """
-    複製文章給特定使用者,並自動共享所有參考的素材
+    複製分享的文章給目標使用者,並自動將使用者加入參考素材的共享列表
     
-    :param source_user_id: 來源使用者 ID
-    :param source_article_id: 來源文章 ID
+    :param source_article_id: 來源文章 ID (不需要知道擁有者)
     :param target_user_id: 目標使用者 ID
     :return: 新文章的 ID
     :raises ArticleNotFoundError: 當來源文章不存在時
     :raises DatabaseOperationError: 當儲存失敗時
     """
-    import copy
-    from article_copilot.daos.mongo_db.material_dao import get_material_dao
     
     mongodb_dao = get_article_dao()
     redis_dao = get_redis_article_dao(ttl=REDIS_CACHE_TTL)
@@ -452,10 +451,11 @@ def copy_article_to_user(source_user_id: str, source_article_id: str, target_use
     if not mongodb_dao:
         raise DatabaseConnectionError("MongoDB", "Connection not available")
     
-    # 載入來源文章
-    source_article = mongodb_dao.get_article(source_user_id, source_article_id)
+    # 從 MongoDB 直接用 article_id 查詢文章(不指定 user_id)
+    # 需要在 DAO 層新增支援此查詢的方法
+    source_article = mongodb_dao.get_article_by_id(source_article_id)
     if not source_article:
-        raise ArticleNotFoundError(source_article_id, source_user_id)
+        raise ArticleNotFoundError(source_article_id, "unknown")
     
     # 檢查目標使用者是否已有相同標題的文章
     target_articles = mongodb_dao.get_user_article_ids(target_user_id)

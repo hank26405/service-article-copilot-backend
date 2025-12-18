@@ -1,4 +1,5 @@
 from typing import Optional, List
+from article_copilot.exceptions.database_exceptions import DatabaseConnectionError, DatabaseOperationError
 from pymongo.errors import PyMongoError
 from pymongo.database import Database
 
@@ -191,6 +192,30 @@ class MongoDBArticleDAO:
         except PyMongoError as e:
             print(f"✗ 檢查文章存在性失敗 (user: {user_id}, article: {article_id}): {e}")
             return False
+        
+    def get_article_by_id(self, article_id: str) -> Optional[Article]:
+        """
+        直接透過 article_id 查詢文章(不限制 user_id)
+        
+        :param article_id: 文章 ID
+        :return: Article 物件或 None
+        """
+        if self.db is None:
+            raise DatabaseConnectionError("MongoDB", "Database client not initialized")
+        
+        try:
+            article_dict = self.articles_collection.find_one({"article_id": article_id})
+            
+            if article_dict:
+                # 移除 MongoDB 的 _id 欄位
+                article_dict.pop('_id', None)
+                return Article.model_validate(article_dict)
+            
+            return None
+            
+        except PyMongoError as e:
+            print(f"✗ 讀取文章失敗 (article: {article_id}): {e}")
+            raise DatabaseOperationError("get_article_by_id", "MongoDB", str(e))
 
 # --- 工廠函式 ---
 
