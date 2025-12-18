@@ -31,7 +31,7 @@ class ContentBlock(BaseModel):
     type: str = Field(..., description="內容類型: paragraph, image, html")
     content: Union[str, ImageContent, ChartContent, TableContent] = Field(..., description="內容資料")
     block_prompt: Optional[str] = Field(default="", description="生成內容所使用的提示詞")
-    reference_material_names: List[str] = Field(default=[], description="生成此區塊所參考的素材名稱列表")
+    reference_material_ids: List[str] = Field(default=[], description="生成此區塊所參考的素材 ID 列表")
     reference_examples: str = Field(default="", description="參考範例,用於 LLM 生成時的風格參考")
     llm_raw_output: Optional[str] = Field(default=None, description="LLM 原始生成結果 (未經處理)")
     fixed: bool = Field(default=False, description="是否為修訂內容區塊")
@@ -43,7 +43,7 @@ class ContentBlock(BaseModel):
                 "type": "paragraph",
                 "content": "這是一段文字內容",
                 "block_prompt": "",
-                "reference_material_names": ["material1", "material2"],
+                "reference_material_ids": ["material1", "material2"],
                 "reference_examples": "example",
                 "llm_raw_output": "LLM 原始輸出內容...",
                 "fixed": False

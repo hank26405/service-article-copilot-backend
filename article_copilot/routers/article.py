@@ -20,6 +20,7 @@ from article_copilot.services.article_manager import (
     delete_section,
     delete_content_block,
     delete_article,
+    copy_article_to_user,
     ArticleManager
 )
 
@@ -164,10 +165,9 @@ def create_article_router() -> APIRouter:
             log.error(f"Error: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail={"error": "INTERNAL_SERVER_ERROR"})
 
-    @router.patch("/{article_id}/sections/{section_id}", response_model=StandardResponse)
+    @router.patch("/{article_id}/sections/", response_model=StandardResponse)
     async def update_section(
         article_id: str = Path(...),
-        section_id: str = Path(...),
         request: Section = Body(..., description="更新後的完整章節資料"),
         current_user: User = Depends(get_current_user)
     ):
@@ -176,7 +176,7 @@ def create_article_router() -> APIRouter:
             result = replace_section(
                 user_id=current_user.id,
                 article_id=article_id,
-                section_id=section_id,
+                section_id=request.section_id,
                 updated_section=request
             )
             return StandardResponse(message=result, success=True)
@@ -331,6 +331,31 @@ def create_article_router() -> APIRouter:
             raise HTTPException(status_code=400, detail=e.to_dict())
         except Exception as e:
             log.error(f"Update prompt error: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail={"error": "INTERNAL_SERVER_ERROR"})
+    
+    @router.post("/{article_id}/copy/{target_user_id}", response_model=CreateArticleResponse)
+    async def copy_article(
+        article_id: str = Path(..., description="來源文章 ID"),
+        target_user_id: str = Path(..., description="目標使用者 ID"),
+        current_user: User = Depends(get_current_user)
+    ):
+        """複製文章給特定使用者"""
+        try:
+            new_article_id = copy_article_to_user(
+                source_user_id=current_user.id,
+                source_article_id=article_id,
+                target_user_id=target_user_id
+            )
+            return CreateArticleResponse(
+                article_id=new_article_id,
+                message=f"Article copied successfully to user {target_user_id}"
+            )
+        except ArticleNotFoundError as e:
+            raise HTTPException(status_code=404, detail=e.to_dict())
+        except DatabaseConnectionError as e:
+            raise HTTPException(status_code=503, detail=e.to_dict())
+        except Exception as e:
+            log.error(f"Copy article error: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail={"error": "INTERNAL_SERVER_ERROR"})
     
     return router

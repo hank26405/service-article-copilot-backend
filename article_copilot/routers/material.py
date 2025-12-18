@@ -5,8 +5,12 @@ from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from fastapi.responses import StreamingResponse
 from typing import List
 import io
+from pydantic import BaseModel
+from urllib.parse import quote
 
-from article_copilot.models.api.requests.material_requests import PasteRequest
+from article_copilot.models.api.requests.material_requests import PasteRequest, TextUploadRequest
+
+
 from article_copilot.models.domain.material import Material
 from article_copilot.services.material import MaterialService
 from article_copilot.security.auth import get_current_user
@@ -47,17 +51,26 @@ def create_material_router() -> APIRouter:
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Paste processing failed: {str(e)}")
 
-    @router.get("/list", response_model=List[Material])
-    async def list_materials(
-        include_shared: bool = False,
+    @router.post("/upload-text", response_model=Material)
+    async def upload_text_material(
+        request: TextUploadRequest,
         current_user: User = Depends(get_current_user)
     ):
         """
-        列出素材
-        :param include_shared: 是否包含被分享的素材
+        上傳純文字或 JSON 字串並建立素材
+        前端需傳送包含 text_content 的 JSON
         """
         service = MaterialService(current_user.id)
-        return service.list_materials(include_shared=include_shared)
+        try:
+            material = await service.process_text_content(
+                request.text_content, 
+                request.filename,
+                request.content_type
+            )
+            return material
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Text upload failed: {str(e)}")
+
 
     @router.get("/list/own", response_model=List[Material])
     async def list_own_materials(current_user: User = Depends(get_current_user)):
@@ -135,84 +148,43 @@ def create_material_router() -> APIRouter:
         if not material:
             raise HTTPException(status_code=404, detail="Material not found")
         
+        # 檢查權限
+        if material.user_id != current_user.id and current_user.id not in material.shared_with_users:
+            raise HTTPException(status_code=403, detail="Access denied")
+        
         file_bytes = service.get_file_content(material_id)
         if not file_bytes:
             raise HTTPException(status_code=404, detail="File content not found")
         
+        # URL 編碼檔名以支援中文
+        encoded_filename = quote(material.filename)
+        
         return StreamingResponse(
             io.BytesIO(file_bytes), 
-            media_type=material.mime_type,
-            headers={"Content-Disposition": f"inline; filename={material.filename}"}
+            media_type=material.mime_type or "application/octet-stream",
+            headers={
+                "Content-Disposition": f"inline; filename*=UTF-8''{encoded_filename}"
+            }
         )
 
-    @router.post("/references/article/{article_id}")
-    async def update_article_references(
-        article_id: str,
-        material_names: List[str],
+    @router.patch("/{material_id}/filename")
+    async def update_material_filename(
+        material_id: str,
+        new_filename: str,
         current_user: User = Depends(get_current_user)
     ):
-        """更新文章層級的參考素材名稱列表"""
+        """更新素材檔名 (僅擁有者可修改)"""
         service = MaterialService(current_user.id)
         try:
-            success = service.update_article_references(article_id, material_names)
-            if not success:
-                raise HTTPException(status_code=500, detail="Failed to update article references")
+            material = service.update_material_filename(material_id, new_filename)
             return {
-                "message": "Article references updated successfully",
-                "article_id": article_id,
-                "material_names": material_names
+                "message": "Filename updated successfully",
+                "material_id": material.material_id,
+                "new_filename": material.filename
             }
+        except ValueError as e:
+            raise HTTPException(status_code=403, detail=str(e))
         except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
-
-    @router.post("/references/section/{article_id}/{section_id}")
-    async def update_section_references(
-        article_id: str,
-        section_id: str,
-        material_names: List[str],
-        current_user: User = Depends(get_current_user)
-    ):
-        """更新章節層級的參考素材名稱列表"""
-        service = MaterialService(current_user.id)
-        try:
-            success = service.update_section_references(article_id, section_id, material_names)
-            if not success:
-                raise HTTPException(status_code=500, detail="Failed to update section references")
-            return {
-                "message": "Section references updated successfully",
-                "article_id": article_id,
-                "section_id": section_id,
-                "material_names": material_names
-            }
-        except SectionNotFoundError as e:
-            raise HTTPException(status_code=404, detail=str(e))
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
-
-    @router.post("/references/block/{article_id}/{section_id}/{block_id}")
-    async def update_block_references(
-        article_id: str,
-        section_id: str,
-        block_id: str,
-        material_names: List[str],
-        current_user: User = Depends(get_current_user)
-    ):
-        """更新內容區塊層級的參考素材名稱列表"""
-        service = MaterialService(current_user.id)
-        try:
-            success = service.update_block_references(article_id, section_id, block_id, material_names)
-            if not success:
-                raise HTTPException(status_code=500, detail="Failed to update block references")
-            return {
-                "message": "Block references updated successfully",
-                "article_id": article_id,
-                "section_id": section_id,
-                "block_id": block_id,
-                "material_names": material_names
-            }
-        except (SectionNotFoundError, ContentBlockNotFoundError) as e:
-            raise HTTPException(status_code=404, detail=str(e))
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            raise HTTPException(status_code=500, detail=f"Update failed: {str(e)}")
 
     return router
