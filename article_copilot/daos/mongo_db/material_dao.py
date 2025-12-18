@@ -31,6 +31,12 @@ class MongoDBMaterialDAO:
             self.collection.create_index([("user_id", 1), ("created_at", -1)], background=True)
             # 依 shared_with_users 查詢 (列出被分享的素材)
             self.collection.create_index("shared_with_users", background=True)
+            self.collection.create_index(
+                [("user_id", 1), ("filename", 1)], 
+                unique=True, 
+                background=True,
+                name="user_filename_unique"
+            )
             print("✓ MongoDB Material indexes created successfully")
         except Exception as e:
             print(f"⚠ MongoDB Material index creation warning: {e}")
@@ -48,6 +54,9 @@ class MongoDBMaterialDAO:
             )
             return True
         except PyMongoError as e:
+            if "user_filename_unique" in str(e) or "duplicate key" in str(e):
+                print(f"✗ Duplicate filename for user {material.user_id}: {material.filename}")
+                raise ValueError(f"檔名 '{material.filename}' 已存在，請使用不同的檔名")
             print(f"✗ Failed to save material metadata: {e}")
             return False
 
@@ -131,6 +140,18 @@ class MongoDBMaterialDAO:
             return result.modified_count > 0
         except PyMongoError as e:
             print(f"✗ Failed to unshare material: {e}")
+            return False
+
+    def check_filename_exists(self, user_id: str, filename: str) -> bool:
+        """檢查使用者是否已有相同檔名的素材"""
+        try:
+            count = self.collection.count_documents({
+                "user_id": user_id,
+                "filename": filename
+            })
+            return count > 0
+        except PyMongoError as e:
+            print(f"✗ Failed to check filename: {e}")
             return False
 
     # --- GridFS Operations ---

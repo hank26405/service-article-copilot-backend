@@ -2,13 +2,14 @@ from typing import Any, Dict, List, Optional, Union
 from pydantic import BaseModel, Field
 from datetime import datetime
 import uuid
+import re
 
 class Material(BaseModel):
     """
     素材領域模型 (Material Domain Model)
     實現 Dual-Representation Strategy (Display View vs LLM View)
     """
-    material_id: str = Field(default_factory=lambda: f"mat-{uuid.uuid4().hex[:8]}")
+    material_id: str = Field(default="", description="素材 ID (filename + uuid)")
     user_id: str = Field(..., description="擁有者 ID")
     shared_with_users: List[str] = Field(default_factory=list, description="共享使用者 ID 列表")
     filename: str = Field(..., description="原始檔名")

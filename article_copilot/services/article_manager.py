@@ -1,6 +1,7 @@
 """Article Manager Service - 文章管理服務層"""
 import uuid
 from typing import Any, Dict, List, Optional
+from datetime import datetime
 
 from article_copilot.daos.mongo_db.version_mongo_dao import get_version_dao
 from article_copilot.models.api.responses.article_responses import ArticlesTitleResponse
@@ -181,15 +182,33 @@ class ArticleManager:
 # --- 文章 CRUD 服務函式 ---
 
 def create_new_article(user_id: str, title: str) -> str:
-    """建立新文章"""
+    """建立新文章,若標題重複則自動加上時間後綴"""
     mongodb_dao = get_article_dao()
     redis_dao = get_redis_article_dao(ttl=REDIS_CACHE_TTL)
     
     if not mongodb_dao:
         raise DatabaseConnectionError("MongoDB", "Connection not available")
-        
+    
+    # 檢查使用者是否已有相同標題的文章
+    existing_articles = mongodb_dao.get_user_article_ids(user_id)
+    existing_titles = set()
+    
+    for article_id in existing_articles:
+        try:
+            article = mongodb_dao.get_article(user_id, article_id)
+            if article:
+                existing_titles.add(article.title)
+        except Exception:
+            continue
+    
+    # 如果標題重複,加上時間後綴
+    final_title = title
+    if title in existing_titles:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        final_title = f"{title}_{timestamp}"
+    
     article_id = f"article-{uuid.uuid4().hex[:8]}"
-    new_article = Article(article_id=article_id, user_id=user_id, title=title)
+    new_article = Article(article_id=article_id, user_id=user_id, title=final_title)
     
     success = mongodb_dao.save_article(new_article)
     if not success:
@@ -411,3 +430,103 @@ def replace_section(
             return f"Success! Subsection has been replaced."
     
     raise SectionNotFoundError(f"Section with ID '{section_id}' not found.")
+
+def copy_article_to_user(source_user_id: str, source_article_id: str, target_user_id: str) -> str:
+    """
+    複製文章給特定使用者,並自動共享所有參考的素材
+    
+    :param source_user_id: 來源使用者 ID
+    :param source_article_id: 來源文章 ID
+    :param target_user_id: 目標使用者 ID
+    :return: 新文章的 ID
+    :raises ArticleNotFoundError: 當來源文章不存在時
+    :raises DatabaseOperationError: 當儲存失敗時
+    """
+    import copy
+    from article_copilot.daos.mongo_db.material_dao import get_material_dao
+    
+    mongodb_dao = get_article_dao()
+    redis_dao = get_redis_article_dao(ttl=REDIS_CACHE_TTL)
+    material_dao = get_material_dao()
+    
+    if not mongodb_dao:
+        raise DatabaseConnectionError("MongoDB", "Connection not available")
+    
+    # 載入來源文章
+    source_article = mongodb_dao.get_article(source_user_id, source_article_id)
+    if not source_article:
+        raise ArticleNotFoundError(source_article_id, source_user_id)
+    
+    # 檢查目標使用者是否已有相同標題的文章
+    target_articles = mongodb_dao.get_user_article_ids(target_user_id)
+    existing_titles = set()
+    
+    for article_id in target_articles:
+        try:
+            article = mongodb_dao.get_article(target_user_id, article_id)
+            if article:
+                existing_titles.add(article.title)
+        except Exception:
+            continue
+    
+    # 如果標題重複,加上時間後綴
+    final_title = source_article.title
+    if source_article.title in existing_titles:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        final_title = f"{source_article.title}_{timestamp}"
+    
+    # 建立新的文章 ID
+    new_article_id = f"article-{uuid.uuid4().hex[:8]}"
+    
+    # 深拷貝文章內容並更新 ID 和使用者
+    new_article = copy.deepcopy(source_article)
+    new_article.article_id = new_article_id
+    new_article.user_id = target_user_id
+    new_article.title = final_title
+    
+    # 收集所有參考的素材 ID
+    referenced_material_ids = set()
+    
+    def collect_material_ids(sections):
+        """遞迴收集所有 section 和 content_block 中的 reference_material_ids"""
+        for section in sections:
+            # 收集該 section 的所有 content_blocks 中的素材 ID
+            for block in section.content_blocks:
+                if hasattr(block, 'reference_material_ids') and block.reference_material_ids:
+                    referenced_material_ids.update(block.reference_material_ids)
+            
+            # 遞迴處理子章節
+            if section.subsections:
+                collect_material_ids(section.subsections)
+    
+    # 收集文章中所有參考的素材 ID
+    collect_material_ids(new_article.sections)
+    
+    # 將目標使用者加入所有參考素材的共享列表
+    shared_count = 0
+    for material_id in referenced_material_ids:
+        try:
+            # 檢查素材是否存在
+            material = material_dao.get_material(material_id)
+            if material:
+                # 只有當目標使用者不是素材擁有者時才需要加入共享列表
+                if material.user_id != target_user_id:
+                    success = material_dao.share_material_with_users(material_id, [target_user_id])
+                    if success:
+                        shared_count += 1
+        except Exception as e:
+            # 記錄錯誤但不中斷複製流程
+            print(f"Warning: Failed to share material {material_id}: {e}")
+            continue
+    
+    # 儲存新文章到 MongoDB
+    success = mongodb_dao.save_article(new_article)
+    if not success:
+        raise DatabaseOperationError("copy", "MongoDB", f"Article {new_article_id}")
+    
+    # 儲存到 Redis 快取
+    redis_dao.save_article(new_article)
+    
+    print(f"Article copied. Shared {shared_count} materials with user {target_user_id}")
+    
+    return new_article_id

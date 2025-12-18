@@ -3,5 +3,10 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 class PasteRequest(BaseModel):
-    filename: Optional[str] = Field(None, description="素材名稱")
-    html_content: str = Field(..., description="從剪貼簿取得的 HTML 內容")
+    html_content: str
+    filename: Optional[str] = None
+
+class TextUploadRequest(BaseModel):
+    text_content: str
+    filename: Optional[str] = None
+    content_type: str = "text/plain"  # 可以是 "text/plain" 或 "application/json"
