@@ -21,6 +21,8 @@ from article_copilot.services.article_manager import (
     delete_content_block,
     delete_article,
     copy_article_to_user,
+    move_section_up,
+    move_section_down,
     ArticleManager
 )
 
@@ -202,6 +204,46 @@ def create_article_router() -> APIRouter:
             raise HTTPException(status_code=404, detail=e.to_dict())
         except Exception as e:
             log.error(f"Error: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail={"error": "INTERNAL_SERVER_ERROR"})
+
+    @router.post("/{article_id}/sections/{section_id}/move-up", response_model=StandardResponse)
+    async def move_section_position_up(
+        article_id: str = Path(..., description="文章 ID"),
+        section_id: str = Path(..., description="要上移的章節 ID"),
+        current_user: User = Depends(get_current_user)
+    ):
+        """將 level 1 章節上移一個位置"""
+        try:
+            result = move_section_up(current_user.id, article_id, section_id)
+            return StandardResponse(message=result, success=True)
+        except ArticleNotFoundError as e:
+            raise HTTPException(status_code=404, detail=e.to_dict())
+        except SectionNotFoundError as e:
+            raise HTTPException(status_code=404, detail=e.to_dict())
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail={"error": str(e)})
+        except Exception as e:
+            log.error(f"Move section up error: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail={"error": "INTERNAL_SERVER_ERROR"})
+
+    @router.post("/{article_id}/sections/{section_id}/move-down", response_model=StandardResponse)
+    async def move_section_position_down(
+        article_id: str = Path(..., description="文章 ID"),
+        section_id: str = Path(..., description="要下移的章節 ID"),
+        current_user: User = Depends(get_current_user)
+    ):
+        """將 level 1 章節下移一個位置"""
+        try:
+            result = move_section_down(current_user.id, article_id, section_id)
+            return StandardResponse(message=result, success=True)
+        except ArticleNotFoundError as e:
+            raise HTTPException(status_code=404, detail=e.to_dict())
+        except SectionNotFoundError as e:
+            raise HTTPException(status_code=404, detail=e.to_dict())
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail={"error": str(e)})
+        except Exception as e:
+            log.error(f"Move section down error: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail={"error": "INTERNAL_SERVER_ERROR"})
 
     # ==================== 內容區塊管理 ====================

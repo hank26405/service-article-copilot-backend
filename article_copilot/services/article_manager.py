@@ -433,6 +433,84 @@ def replace_section(
     
     raise SectionNotFoundError(f"Section with ID '{section_id}' not found.")
 
+def move_section_up(user_id: str, article_id: str, section_id: str) -> str:
+    """
+    將指定的 level 1 章節上移一個位置
+    
+    :param user_id: 使用者 ID
+    :param article_id: 文章 ID
+    :param section_id: 要移動的章節 ID
+    :return: 成功訊息
+    :raises SectionNotFoundError: 當章節不存在或不是 level 1 章節時
+    :raises ValueError: 當章節已經在最頂端時
+    """
+    manager = ArticleManager(user_id, article_id)
+    
+    # 找到目標章節的索引
+    section_index = -1
+    for i, sec in enumerate(manager.article.sections):
+        if sec.section_id == section_id:
+            section_index = i
+            break
+    
+    if section_index == -1:
+        raise SectionNotFoundError(f"Section with ID '{section_id}' not found or is not a level 1 section.")
+    
+    # 檢查是否已經在最頂端
+    if section_index == 0:
+        raise ValueError("Section is already at the top position.")
+    
+    # 交換位置
+    manager.article.sections[section_index], manager.article.sections[section_index - 1] = \
+        manager.article.sections[section_index - 1], manager.article.sections[section_index]
+    
+    section_title = manager.article.sections[section_index - 1].title
+    manager.save(
+        operation="move_section_up",
+        operation_desc=f"Moved section '{section_title}' up"
+    )
+    
+    return f"Success! Section '{section_title}' moved up."
+
+def move_section_down(user_id: str, article_id: str, section_id: str) -> str:
+    """
+    將指定的 level 1 章節下移一個位置
+    
+    :param user_id: 使用者 ID
+    :param article_id: 文章 ID
+    :param section_id: 要移動的章節 ID
+    :return: 成功訊息
+    :raises SectionNotFoundError: 當章節不存在或不是 level 1 章節時
+    :raises ValueError: 當章節已經在最底端時
+    """
+    manager = ArticleManager(user_id, article_id)
+    
+    # 找到目標章節的索引
+    section_index = -1
+    for i, sec in enumerate(manager.article.sections):
+        if sec.section_id == section_id:
+            section_index = i
+            break
+    
+    if section_index == -1:
+        raise SectionNotFoundError(f"Section with ID '{section_id}' not found or is not a level 1 section.")
+    
+    # 檢查是否已經在最底端
+    if section_index == len(manager.article.sections) - 1:
+        raise ValueError("Section is already at the bottom position.")
+    
+    # 交換位置
+    manager.article.sections[section_index], manager.article.sections[section_index + 1] = \
+        manager.article.sections[section_index + 1], manager.article.sections[section_index]
+    
+    section_title = manager.article.sections[section_index + 1].title
+    manager.save(
+        operation="move_section_down",
+        operation_desc=f"Moved section '{section_title}' down"
+    )
+    
+    return f"Success! Section '{section_title}' moved down."
+
 def copy_article_to_user(source_article_id: str, target_user_id: str) -> str:
     """
     複製分享的文章給目標使用者,並自動將使用者加入參考素材的共享列表
