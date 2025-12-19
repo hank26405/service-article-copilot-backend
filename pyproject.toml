@@ -1,6 +1,6 @@
 [project]
 name = "service-article-copilot"
-version = "0.3.3"
+version = "0.4.0"
 description = "Article Copilot - AI-powered article management service with Redis cache and MongoDB storage."
 authors = [
     { name = "Hank Liang", email = "HankLiang@example.com" }
